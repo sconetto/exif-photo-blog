@@ -3,7 +3,10 @@ import {
   sql,
   query,
 } from '@/platforms/postgres';
-import { convertArrayToPostgresString } from '@/db';
+import {
+  convertArrayToPostgresString,
+  parameterizeForDb,
+} from '@/db';
 import {
   PhotoDb,
   PhotoDbInsert,
@@ -307,17 +310,30 @@ export const getPhotosMostRecentUpdate = async () =>
   , 'getPhotosMostRecentUpdate');
 
 export const getUniqueCameras = async () =>
-  safelyQuery(() => sql`
-    SELECT DISTINCT make||' '||model as camera, make, model,
-      COUNT(*),
-      MAX(updated_at) as last_modified
-    FROM photos
-    WHERE hidden IS NOT TRUE
-    AND trim(make) <> ''
-    AND trim(model) <> ''
-    GROUP BY make, model
-    ORDER BY camera ASC
-  `.then(({ rows }): Cameras => rows.map(({
+  safelyQuery(() => query(`
+    SELECT
+      (ARRAY_AGG(make ORDER BY variant_count DESC, updated_at DESC))[1]
+        AS make,
+      (ARRAY_AGG(model ORDER BY variant_count DESC, updated_at DESC))[1]
+        AS model,
+      COUNT(*) AS count,
+      MAX(updated_at) AS last_modified
+    FROM (
+      SELECT
+        make,
+        model,
+        updated_at,
+        COUNT(*) OVER (PARTITION BY make, model) AS variant_count,
+        ${parameterizeForDb('make')} AS make_normalized,
+        ${parameterizeForDb('model')} AS model_normalized
+      FROM photos
+      WHERE hidden IS NOT TRUE
+      AND trim(make) <> ''
+      AND trim(model) <> ''
+    ) AS camera_variants
+    GROUP BY make_normalized, model_normalized
+    ORDER BY make_normalized ASC, model_normalized ASC
+  `).then(({ rows }): Cameras => rows.map(({
       make, model, count, last_modified,
     }) => ({
       cameraKey: createCameraKey({ make, model }),
@@ -328,17 +344,29 @@ export const getUniqueCameras = async () =>
   , 'getUniqueCameras');
 
 export const getUniqueLenses = async () =>
-  safelyQuery(() => sql`
-    SELECT DISTINCT lens_make||' '||lens_model as lens,
-      lens_make, lens_model,
-      COUNT(*),
-      MAX(updated_at) as last_modified
-    FROM photos
-    WHERE hidden IS NOT TRUE
-    AND trim(lens_model) <> ''
-    GROUP BY lens_make, lens_model
-    ORDER BY lens ASC
-  `.then(({ rows }): Lenses => rows
+  safelyQuery(() => query(`
+    SELECT
+      (ARRAY_AGG(lens_make ORDER BY variant_count DESC, updated_at DESC))[1]
+        AS lens_make,
+      (ARRAY_AGG(lens_model ORDER BY variant_count DESC, updated_at DESC))[1]
+        AS lens_model,
+      COUNT(*) AS count,
+      MAX(updated_at) AS last_modified
+    FROM (
+      SELECT
+        lens_make,
+        lens_model,
+        updated_at,
+        COUNT(*) OVER (PARTITION BY lens_make, lens_model) AS variant_count,
+        ${parameterizeForDb('lens_make')} AS lens_make_normalized,
+        ${parameterizeForDb('lens_model')} AS lens_model_normalized
+      FROM photos
+      WHERE hidden IS NOT TRUE
+      AND trim(lens_model) <> ''
+    ) AS lens_variants
+    GROUP BY lens_make_normalized, lens_model_normalized
+    ORDER BY lens_make_normalized ASC, lens_model_normalized ASC
+  `).then(({ rows }): Lenses => rows
       .map(({ lens_make: make, lens_model: model, count, last_modified }) => ({
         lensKey: createLensKey({ make, model }),
         lens: { make, model },

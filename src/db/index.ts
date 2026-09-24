@@ -16,7 +16,7 @@ export const PHOTO_DEFAULT_LIMIT = 100;
 const CHARACTERS_TO_REMOVE = [',', '/'];
 const CHARACTERS_TO_REPLACE = ['+', '&', '|', ':', '_', ' '];
 
-const parameterizeForDb = (field: string) =>
+export const parameterizeForDb = (field: string) =>
   `REGEXP_REPLACE(
     REGEXP_REPLACE(
       LOWER(TRIM(${field})),
