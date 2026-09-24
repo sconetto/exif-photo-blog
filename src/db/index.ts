@@ -159,7 +159,8 @@ export const getWheresFromOptions = (
     wheres.push(`recipe_title=$${valuesIndex++}`);
     wheresValues.push(recipe);
   }
-  if (focal) {
+  // Compare against undefined so focal lengths of 0 are filtered
+  if (focal !== undefined) {
     wheres.push(`focal_length=$${valuesIndex++}`);
     wheresValues.push(focal);
   }
